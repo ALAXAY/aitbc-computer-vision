@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use these materials, please cite them as below."
+type: software
+title: "AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab"
+abstract: "Google Colab notebooks of the professional development course AI Technologies (Basic Course), AIT-BC: computer vision for unmanned aerial vehicles and unmanned ground vehicles on real visible and thermal imagery."
+authors:
+  - family-names: Fesenko
+    given-names: Oleksii
+    affiliation: "Kruty Heroes Military Institute of Telecommunications and Information Technology"
+repository-code: "https://github.com/ALAXAY/aitbc-computer-vision"
+license: Apache-2.0
+version: "0.7.0"
+date-released: "2026-11-02"
+keywords:
+  - computer vision
+  - UAV
+  - UGV
+  - thermal imagery
+  - Google Colab
+  - education

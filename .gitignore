@@ -1,0 +1,8 @@
+__pycache__/
+.ipynb_checkpoints/
+aitbc_data/
+AITBC_project/
+*.onnx
+*.onnx.data
+*.joblib
+*.pt

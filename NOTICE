@@ -1,0 +1,13 @@
+AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab
+Copyright 2026 Oleksii Fesenko
+
+Developed at the Kruty Heroes Military Institute of Telecommunications and Information Technology,
+Kyiv, Ukraine, for the professional development course AI Technologies (Basic Course), AIT-BC.
+
+The code and the text of the notebooks are licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The data sets used by the notebooks are not part of this repository. Figures in executed_examples/ and
+figures/ that show images of a data set are distributed under the licence of that data set and keep the
+attribution given in DATA_LICENSES.md:
+  - HIT-UAV, Kust4K, M3OT, TII-RATM, SULAND / SULAND_v2: CC BY 4.0;
+  - GOOSE: CC BY-SA 4.0.
