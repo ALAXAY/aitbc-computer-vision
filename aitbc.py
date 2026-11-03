@@ -40,10 +40,13 @@ SULAND    33771 frames 1440x1920 of video sequences of a camera over grass, leav
           Vivoli E. et al. Remote Sensing 16(4), 677 (2024); refined annotation SULAND_v2,
           Lekhak S. et al., arXiv:2607.28996 (2026). Licence CC BY 4.0.
 
+DUT       10000 visible images of drones taken from the ground with boxes of the class UAV and 20
+          tracking videos of a single drone. Zhao J. et al., IEEE Trans. Intelligent Transportation
+          Systems (2022), arXiv:2205.10851. Licence Apache-2.0.
 Units: metres, seconds, degrees. Images are NumPy arrays H x W (grey) or H x W x 3 (RGB).
 """
 
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 
 import csv
 import io
@@ -1271,6 +1274,10 @@ def catalogue():
          "33771 frames 1440x1920 of 55 sequences; boxes of surrogates of the landmines PFM-1 and PMA-2",
          "CC BY 4.0", "Vivoli E. et al., Remote Sensing 16(4), 677 (2024); Lekhak S. et al., arXiv:2607.28996 (2026)",
          "https://huggingface.co/datasets/SagarLekhak/SULAND_v2_RGB_Surface_Landmine_Dataset"),
+        ("DUT Anti-UAV", "ground camera looking at drones in the sky (counter-UAV task)",
+         "10000 visible images of drones with boxes (train 5200, val 2600, test 2200); 20 tracking videos",
+         "Apache-2.0", "Zhao J. et al., IEEE Trans. Intelligent Transportation Systems (2022), arXiv:2205.10851",
+         "https://huggingface.co/datasets/aegean-ai/dut-anti-uav"),
     ]
 
 
@@ -2567,3 +2574,547 @@ def grad_cam(model, x, layer, class_index=None):
     cam = cv2.resize(cam, (x.shape[3], x.shape[2]), interpolation=cv2.INTER_LINEAR)
     cam = cam / cam.max() if cam.max() > 0 else cam
     return cam, c, torch.softmax(out.detach(), 1)[0].cpu().numpy()
+
+# =====================================================================================
+# Topic 5. Detection, segmentation and tracking (version 2.7.0)
+# =====================================================================================
+
+class DUTAntiUAV:
+    """DUT Anti-UAV: visible-light images and videos of drones taken from the ground (counter-UAV task).
+
+    Detection part: 10 000 images (train 5200, val 2600, test 2200), mostly 1920 x 1080 and 1280 x 720, with
+    boxes of the class UAV (Pascal VOC corners). Tracking part: 20 videos of a single drone with one box per frame
+    ([x, y, w, h]; -100 when the drone is not visible).
+    Zhao J., Zhang J., Li D., Wang D. Vision-based anti-UAV detection and tracking. IEEE Transactions on
+    Intelligent Transportation Systems (2022), arXiv:2205.10851. Licence Apache-2.0 (Hugging Face copy
+    aegean-ai/dut-anti-uav of the original repository github.com/wangdongdut/DUT-Anti-UAV).
+    """
+
+    BASE = "https://huggingface.co/datasets/aegean-ai/dut-anti-uav/resolve/main/"
+    PARTS = {"train": 6, "val": 3, "test": 3}
+    VIDEOS = {"video02": (83, "1280x720"), "video03": (100, "1280x720"), "video04": (341, "1920x1080"),
+              "video06": (200, "1920x1080"), "video14": (590, "1920x1080")}
+
+    def __init__(self):
+        self._zips = {}
+        self._ann = {}
+
+    def _zip(self, split):
+        if split not in self._zips:
+            self._zips[split] = RemoteZip(self.BASE + f"detection/{split}.zip", f"dut_{split}")
+        return self._zips[split]
+
+    def annotations(self, split):
+        """Table of a split: image_id, width, height, boxes (list of [x1, y1, x2, y2] in pixels)."""
+        if split in self._ann:
+            return self._ann[split]
+        path = os.path.join(_cache(), "dut_anti_uav", f"annotations_{split}.json")
+        if not os.path.exists(path):
+            import pyarrow.parquet as pq
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            name = {"train": "train", "val": "val", "test": "test"}[split]
+
+            def read(k):
+                f = self.BASE + f"detection-parquet/{name}/{name}-{k:05d}.parquet"
+                tb = pq.ParquetFile(_RangeFile(f)).read(columns=["image_id", "width", "height", "objects"])
+                return tb.to_pylist()
+
+            rows = []
+            with ThreadPoolExecutor(6) as ex:
+                for part in ex.map(read, range(self.PARTS[split])):
+                    for r in part:
+                        rows.append({"image_id": r["image_id"], "width": int(r["width"]), "height": int(r["height"]),
+                                     "boxes": [[float(v) for v in b] for b in r["objects"]["bbox"]]})
+            with open(path + ".tmp", "w") as fh:
+                json.dump(rows, fh)
+            os.replace(path + ".tmp", path)
+        with open(path) as fh:
+            rows = json.load(fh)
+        import pandas as pd
+        df = pd.DataFrame(rows)
+        df["n"] = df.boxes.map(len)
+        self._ann[split] = df
+        return df
+
+    def image_paths(self, split, image_ids, threads=16):
+        """Download the images (JPEG) of a split selectively; returns local paths."""
+        return self._zip(split).get([f"{split}/img/{i}.jpg" for i in image_ids], threads)
+
+    def load(self, split, image_id):
+        """RGB image and its boxes."""
+        tb = self.annotations(split)
+        row = tb[tb.image_id == image_id].iloc[0]
+        return _rgb(self.image_paths(split, [image_id])[0]), [list(b) for b in row.boxes]
+
+    def video(self, name, max_frames=None, step=1):
+        """Frames (RGB) and ground-truth boxes [x1, y1, x2, y2] (None when the drone is not visible) of a
+        tracking video. The Parquet file of the video is downloaded once (2-14 MB for the videos in VIDEOS)."""
+        import pyarrow.parquet as pq
+        path = os.path.join(_cache(), "dut_anti_uav", f"{name}.parquet")
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            fetch(self.BASE + f"tracking-parquet/{name}.parquet", path)
+        rows = pq.read_table(path, columns=["frame_index", "image", "bbox"]).to_pylist()
+        rows = sorted(rows, key=lambda r: r["frame_index"])[::step]
+        if max_frames:
+            rows = rows[:max_frames]
+        frames, boxes = [], []
+        for r in rows:
+            data = r["image"]["bytes"] if isinstance(r["image"], dict) else r["image"]
+            img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+            frames.append(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            x, y, w, h = r["bbox"]
+            boxes.append(None if w < 0 else [float(x), float(y), float(x + w), float(y + h)])
+        return frames, boxes
+
+    def to_yolo(self, root, name, split, image_ids, max_side=1280, threads=16):
+        """Write images and labels of the selected images in the YOLO format: root/images/name, root/labels/name.
+        Images larger than max_side are reduced (the labels are relative and do not change)."""
+        tb = self.annotations(split).set_index("image_id")
+        paths = self.image_paths(split, image_ids, threads)
+        os.makedirs(os.path.join(root, "images", name), exist_ok=True)
+        os.makedirs(os.path.join(root, "labels", name), exist_ok=True)
+        for p, i in zip(paths, image_ids):
+            img = cv2.imread(p)
+            h, w = img.shape[:2]
+            s = min(1.0, max_side / max(h, w))
+            if s < 1:
+                img = cv2.resize(img, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(os.path.join(root, "images", name, f"{i}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+            with open(os.path.join(root, "labels", name, f"{i}.txt"), "w") as fh:
+                for b in tb.loc[i, "boxes"]:
+                    cx, cy, bw, bh = xyxy_to_yolo(b, w, h)
+                    fh.write(f"0 {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}\n")
+        return len(paths)
+
+
+def crop_view(img, box, scale=4.0, min_side=48):
+    """Square window around a box for viewing: side = scale x the longer side of the box (at least min_side),
+    shifted and reduced so that it lies inside the image (no padding, no mirrored copies of the object)."""
+    h, w = img.shape[:2]
+    side = int(min(max(scale * max(box[2] - box[0], box[3] - box[1]), min_side), h, w))
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    x1 = int(np.clip(round(cx - side / 2), 0, w - side))
+    y1 = int(np.clip(round(cy - side / 2), 0, h - side))
+    return img[y1:y1 + side, x1:x1 + side]
+
+
+def box_iou_matrix(a, b):
+    """IoU of every box of a (N x 4) with every box of b (M x 4), boxes [x1, y1, x2, y2]; returns N x M."""
+    a = np.asarray(a, float).reshape(-1, 4)
+    b = np.asarray(b, float).reshape(-1, 4)
+    lt = np.maximum(a[:, None, :2], b[None, :, :2])
+    rb = np.minimum(a[:, None, 2:], b[None, :, 2:])
+    wh = np.clip(rb - lt, 0, None)
+    inter = wh[..., 0] * wh[..., 1]
+    area_a = (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1])
+    area_b = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    return inter / np.maximum(area_a[:, None] + area_b[None, :] - inter, 1e-9)
+
+
+def nms(boxes, scores, iou=0.5):
+    """Greedy non-maximum suppression; returns the indices of the kept boxes in the order of decreasing score."""
+    boxes = np.asarray(boxes, float).reshape(-1, 4)
+    order = np.argsort(-np.asarray(scores, float))
+    keep = []
+    while order.size:
+        i = order[0]
+        keep.append(i)
+        if order.size == 1:
+            break
+        ious = box_iou_matrix(boxes[i:i + 1], boxes[order[1:]])[0]
+        order = order[1:][ious <= iou]
+    return np.array(keep, int)
+
+
+def yolo_predict(model, rgb, imgsz=640, conf=0.25, iou=0.7, classes=None, agnostic=False, max_det=300):
+    """Run an Ultralytics model on one RGB image; returns boxes (N x 4, [x1, y1, x2, y2]), scores, classes and the
+    time of the stages in ms (preprocess, inference, postprocess)."""
+    r = model.predict(np.ascontiguousarray(rgb[..., ::-1]), imgsz=imgsz, conf=conf, iou=iou, classes=classes,
+                      agnostic_nms=agnostic, max_det=max_det, verbose=False)[0]
+    b = r.boxes
+    return (b.xyxy.cpu().numpy().astype(float), b.conf.cpu().numpy().astype(float),
+            b.cls.cpu().numpy().astype(int), dict(r.speed))
+
+
+def tile_windows(width, height, tile=640, overlap=0.2):
+    """Windows [x1, y1, x2, y2] of size tile x tile covering the frame with the given overlap share."""
+    step = max(1, int(round(tile * (1 - overlap))))
+
+    def starts(n):
+        if n <= tile:
+            return [0]
+        s = list(range(0, n - tile + 1, step))
+        if s[-1] + tile < n:
+            s.append(n - tile)
+        return s
+
+    return [(x, y, min(x + tile, width), min(y + tile, height)) for y in starts(height) for x in starts(width)]
+
+
+def predict_tiled(model, rgb, tile=640, overlap=0.2, imgsz=640, conf=0.25, classes=None, full_frame=True,
+                  merge_iou=0.5):
+    """Detection on overlapping windows (slicing) plus, optionally, on the whole frame; the boxes are shifted to
+    the frame and merged by class-agnostic NMS. Returns boxes, scores, classes and the number of runs."""
+    h, w = rgb.shape[:2]
+    B, S, C = [], [], []
+    runs = 0
+    if full_frame:
+        b, s, c, _ = yolo_predict(model, rgb, imgsz=max(imgsz, 640), conf=conf, classes=classes)
+        B.append(b); S.append(s); C.append(c); runs += 1
+    for x1, y1, x2, y2 in tile_windows(w, h, tile, overlap):
+        b, s, c, _ = yolo_predict(model, rgb[y1:y2, x1:x2], imgsz=imgsz, conf=conf, classes=classes)
+        if len(b):
+            b = b + np.array([x1, y1, x1, y1], float)
+        B.append(b); S.append(s); C.append(c); runs += 1
+    B = np.concatenate(B) if B else np.zeros((0, 4))
+    S = np.concatenate(S) if S else np.zeros(0)
+    C = np.concatenate(C) if C else np.zeros(0, int)
+    if len(B):
+        k = nms(B, S, merge_iou)
+        B, S, C = B[k], S[k], C[k]
+    return B.reshape(-1, 4), S, C, runs
+
+
+def match_greedy(pred_boxes, pred_scores, gt_boxes, iou_thr=0.5):
+    """COCO-style matching in one image: predictions in the order of decreasing score take the free ground-truth
+    box with the largest IoU >= iou_thr. Returns tp (bool per prediction) and the matched gt index (-1)."""
+    pred_boxes = np.asarray(pred_boxes, float).reshape(-1, 4)
+    gt_boxes = np.asarray(gt_boxes, float).reshape(-1, 4)
+    tp = np.zeros(len(pred_boxes), bool)
+    gi = np.full(len(pred_boxes), -1)
+    if len(pred_boxes) == 0 or len(gt_boxes) == 0:
+        return tp, gi
+    ious = box_iou_matrix(pred_boxes, gt_boxes)
+    used = np.zeros(len(gt_boxes), bool)
+    for i in np.argsort(-np.asarray(pred_scores, float)):
+        cand = np.where(~used & (ious[i] >= iou_thr))[0]
+        if cand.size:
+            j = cand[np.argmax(ious[i, cand])]
+            used[j] = True
+            tp[i] = True
+            gi[i] = j
+    return tp, gi
+
+
+def average_precision(tp, scores, n_gt, points=101):
+    """AP as the area under the interpolated precision-recall curve (COCO: 101 recall points).
+    Returns ap, recall and precision arrays (in the order of decreasing score) and the sorted scores."""
+    tp = np.asarray(tp, bool)
+    scores = np.asarray(scores, float)
+    order = np.argsort(-scores, kind="stable")
+    tp, scores = tp[order], scores[order]
+    ctp = np.cumsum(tp)
+    cfp = np.cumsum(~tp)
+    recall = ctp / max(n_gt, 1)
+    precision = ctp / np.maximum(ctp + cfp, 1)
+    if n_gt == 0 or len(tp) == 0:
+        return 0.0, recall, precision, scores
+    env = np.maximum.accumulate(precision[::-1])[::-1]  # precision envelope
+    grid = np.linspace(0, 1, points)
+    idx = np.searchsorted(recall, grid, side="left")
+    ap = float(np.mean([env[i] if i < len(env) else 0.0 for i in idx]))
+    return ap, recall, precision, scores
+
+
+def evaluate_detections(preds, gts, iou_thrs=(0.5,), size_edges=(0, 32, 96, 1e9), conf=None):
+    """Class-agnostic evaluation over a set of images.
+
+    preds: list of (boxes N x 4, scores N); gts: list of ground-truth boxes (M x 4). Returns a dict with AP for
+    every IoU threshold, AP50, AP50-95 (mean over the thresholds given), the precision-recall curve at the first
+    threshold and, at the confidence `conf` (if given), precision, recall and recall per size group (side of the
+    box sqrt(w*h) in pixels between size_edges)."""
+    n_gt = sum(len(g) for g in gts)
+    out = {"n_images": len(gts), "n_gt": n_gt, "ap": {}}
+    for t in iou_thrs:
+        tps, scs = [], []
+        for (pb, ps), gb in zip(preds, gts):
+            tp, _ = match_greedy(pb, ps, gb, t)
+            tps.append(tp); scs.append(np.asarray(ps, float))
+        tp = np.concatenate(tps) if tps else np.zeros(0, bool)
+        sc = np.concatenate(scs) if scs else np.zeros(0)
+        ap, rec, prec, ss = average_precision(tp, sc, n_gt)
+        out["ap"][round(float(t), 2)] = ap
+        if t == iou_thrs[0]:
+            out["curve"] = {"recall": rec, "precision": prec, "scores": ss}
+    out["AP50"] = out["ap"].get(0.5)
+    out["AP"] = float(np.mean(list(out["ap"].values())))
+    if conf is not None:
+        t = iou_thrs[0]
+        tp_n = fp_n = 0
+        found = []
+        sizes = []
+        for (pb, ps), gb in zip(preds, gts):
+            pb = np.asarray(pb, float).reshape(-1, 4)
+            ps = np.asarray(ps, float)
+            keep = ps >= conf
+            tp, gi = match_greedy(pb[keep], ps[keep], gb, t)
+            tp_n += int(tp.sum()); fp_n += int((~tp).sum())
+            hit = np.zeros(len(gb), bool)
+            hit[gi[gi >= 0]] = True
+            found += list(hit)
+            sizes += [float(np.sqrt(max(b[2] - b[0], 0) * max(b[3] - b[1], 0))) for b in gb]
+        found = np.array(found, bool)
+        sizes = np.array(sizes)
+        out["precision"] = tp_n / max(tp_n + fp_n, 1)
+        out["recall"] = float(found.mean()) if len(found) else 0.0
+        out["false_per_image"] = fp_n / max(len(gts), 1)
+        groups = {}
+        for lo, hi in zip(size_edges[:-1], size_edges[1:]):
+            m = (sizes >= lo) & (sizes < hi)
+            name = f"{int(lo)}-{int(hi)} px" if hi < 1e8 else f">= {int(lo)} px"
+            groups[name] = (float(found[m].mean()) if m.any() else float("nan"), int(m.sum()))
+        out["recall_by_size"] = groups
+    return out
+
+
+def f1_threshold(curve):
+    """Confidence that maximises F1 on a precision-recall curve of evaluate_detections."""
+    p, r, s = curve["precision"], curve["recall"], curve["scores"]
+    if len(s) == 0:
+        return 0.25, 0.0
+    f1 = 2 * p * r / np.maximum(p + r, 1e-9)
+    i = int(np.argmax(f1))
+    return float(s[i]), float(f1[i])
+
+
+class _KalmanBox:
+    """Constant-velocity Kalman filter of a box in the state (cx, cy, w, h, vx, vy, vw, vh)."""
+
+    def __init__(self, box, std_pos=0.05, std_vel=0.00625):
+        x1, y1, x2, y2 = box
+        w, h = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+        self.x = np.array([(x1 + x2) / 2, (y1 + y2) / 2, w, h, 0, 0, 0, 0], float)
+        self.sp, self.sv = std_pos, std_vel
+        s = np.array([2 * self.sp * w, 2 * self.sp * h, 2 * self.sp * w, 2 * self.sp * h,
+                      10 * self.sv * w, 10 * self.sv * h, 10 * self.sv * w, 10 * self.sv * h])
+        self.P = np.diag(s ** 2)
+        self.F = np.eye(8)
+        self.F[:4, 4:] = np.eye(4)
+        self.H = np.eye(4, 8)
+
+    def predict(self):
+        w, h = self.x[2], self.x[3]
+        q = np.array([self.sp * w, self.sp * h, self.sp * w, self.sp * h,
+                      self.sv * w, self.sv * h, self.sv * w, self.sv * h]) ** 2
+        self.x = self.F @ self.x
+        self.x[2:4] = np.maximum(self.x[2:4], 1.0)
+        self.P = self.F @ self.P @ self.F.T + np.diag(q)
+
+    def update(self, box):
+        x1, y1, x2, y2 = box
+        z = np.array([(x1 + x2) / 2, (y1 + y2) / 2, max(x2 - x1, 1.0), max(y2 - y1, 1.0)])
+        w, h = self.x[2], self.x[3]
+        R = np.diag(np.array([self.sp * w, self.sp * h, self.sp * w, self.sp * h]) ** 2)
+        S = self.H @ self.P @ self.H.T + R
+        K = self.P @ self.H.T @ np.linalg.inv(S)
+        self.x = self.x + K @ (z - self.H @ self.x)
+        self.P = (np.eye(8) - K @ self.H) @ self.P
+
+    def box(self):
+        cx, cy, w, h = self.x[:4]
+        return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]
+
+
+class ByteTracker:
+    """Multi-object tracker by detection (ByteTrack: Zhang Y. et al., ECCV 2022) in a compact form.
+
+    Every track has a Kalman filter of its box. In each frame: (1) detections with score >= high are matched
+    with all tracks by IoU (Hungarian method, IoU >= match_iou); (2) if use_low, the remaining tracks are matched
+    with the low-score detections (low <= score < high, IoU >= low_iou) - this keeps tracks through partial
+    occlusion and blur; (3) unmatched high detections with score >= new_track open new tracks; (4) a track that is
+    not matched for more than max_lost frames is deleted. use_low=False gives an ordinary IoU tracker (SORT-like).
+    update() returns a list of (track_id, box, score) of the tracks matched in the current frame."""
+
+    def __init__(self, high=0.5, low=0.1, new_track=0.6, match_iou=0.2, low_iou=0.5, max_lost=30, use_low=True):
+        self.high, self.low, self.new_track = high, low, new_track
+        self.match_iou, self.low_iou, self.max_lost, self.use_low = match_iou, low_iou, max_lost, use_low
+        self.tracks = []  # dicts: id, kf, lost, hits
+        self.next_id = 1
+        self.frame = 0
+
+    @staticmethod
+    def _assign(track_boxes, det_boxes, min_iou):
+        from scipy.optimize import linear_sum_assignment
+        if len(track_boxes) == 0 or len(det_boxes) == 0:
+            return [], list(range(len(track_boxes))), list(range(len(det_boxes)))
+        iou = box_iou_matrix(track_boxes, det_boxes)
+        r, c = linear_sum_assignment(-iou)
+        pairs = [(i, j) for i, j in zip(r, c) if iou[i, j] >= min_iou]
+        mt = {i for i, _ in pairs}
+        md = {j for _, j in pairs}
+        return pairs, [i for i in range(len(track_boxes)) if i not in mt], [j for j in range(len(det_boxes)) if j not in md]
+
+    def update(self, boxes, scores):
+        self.frame += 1
+        boxes = np.asarray(boxes, float).reshape(-1, 4)
+        scores = np.asarray(scores, float)
+        hi = np.where(scores >= self.high)[0]
+        lo = np.where((scores >= self.low) & (scores < self.high))[0]
+        for t in self.tracks:
+            t["kf"].predict()
+        out = []
+        tb = np.array([t["kf"].box() for t in self.tracks]).reshape(-1, 4)
+        pairs, un_t, un_d = self._assign(tb, boxes[hi], self.match_iou)
+        for i, j in pairs:
+            t = self.tracks[i]
+            t["kf"].update(boxes[hi[j]]); t["lost"] = 0; t["hits"] += 1
+            out.append((t["id"], boxes[hi[j]].tolist(), float(scores[hi[j]])))
+        rest = un_t
+        if self.use_low and len(lo) and len(rest):
+            # second association only for tracks that were tracked in the previous frame
+            cand = [i for i in rest if self.tracks[i]["lost"] == 0]
+            pairs2, _, _ = self._assign(tb[cand], boxes[lo], self.low_iou)
+            matched = set()
+            for a, j in pairs2:
+                i = cand[a]
+                t = self.tracks[i]
+                t["kf"].update(boxes[lo[j]]); t["lost"] = 0; t["hits"] += 1
+                out.append((t["id"], boxes[lo[j]].tolist(), float(scores[lo[j]])))
+                matched.add(i)
+            rest = [i for i in rest if i not in matched]
+        for i in rest:
+            self.tracks[i]["lost"] += 1
+        for j in un_d:
+            if scores[hi[j]] >= self.new_track:
+                self.tracks.append({"id": self.next_id, "kf": _KalmanBox(boxes[hi[j]]), "lost": 0, "hits": 1})
+                out.append((self.next_id, boxes[hi[j]].tolist(), float(scores[hi[j]])))
+                self.next_id += 1
+        self.tracks = [t for t in self.tracks if t["lost"] <= self.max_lost]
+        return out
+
+    def coast(self):
+        """Frame without detection (the detector is run only on every k-th frame): the filters predict the boxes;
+        returns (track_id, predicted box, None) of the tracks matched in the last processed frame."""
+        self.frame += 1
+        out = []
+        for t in self.tracks:
+            t["kf"].predict()
+            if t["lost"] == 0:
+                out.append((t["id"], t["kf"].box(), None))
+        return out
+
+
+def mot_metrics(gt, hyp, iou_thr=0.5):
+    """CLEAR-MOT and identity metrics of a multi-object tracking result.
+
+    gt, hyp: dict frame -> list of (id, [x1, y1, x2, y2]). Per frame the ground truth and the hypotheses are
+    matched by the Hungarian method on IoU >= iou_thr, keeping the correspondence of the previous frame when it is
+    still valid. Returns MOTA = 1 - (FN + FP + IDSW) / GT, IDF1 (global one-to-one assignment of identities),
+    the counts FN, FP, IDSW, GT and the numbers of ground-truth and hypothesis identities."""
+    from scipy.optimize import linear_sum_assignment
+    frames = sorted(set(gt) | set(hyp))
+    last = {}
+    fn = fp = idsw = n_gt = n_hyp = 0
+    pair_count = {}
+    gt_len, hyp_len = {}, {}
+    for f in frames:
+        g = gt.get(f, [])
+        h = hyp.get(f, [])
+        n_gt += len(g); n_hyp += len(h)
+        for i, _ in g:
+            gt_len[i] = gt_len.get(i, 0) + 1
+        for j, _ in h:
+            hyp_len[j] = hyp_len.get(j, 0) + 1
+        if not g or not h:
+            fn += len(g); fp += len(h)
+            continue
+        iou = box_iou_matrix([b for _, b in g], [b for _, b in h])
+        for a in range(len(g)):
+            for b in range(len(h)):
+                if iou[a, b] >= iou_thr:
+                    key = (g[a][0], h[b][0])
+                    pair_count[key] = pair_count.get(key, 0) + 1
+        cost = 1 - iou
+        hid = [j for j, _ in h]
+        for a, (i, _) in enumerate(g):  # prefer the previous correspondence
+            if i in last and last[i] in hid:
+                b = hid.index(last[i])
+                if iou[a, b] >= iou_thr:
+                    cost[a, b] -= 1.0
+        r, c = linear_sum_assignment(cost)
+        matched_g = set()
+        matched_h = set()
+        for a, b in zip(r, c):
+            if iou[a, b] >= iou_thr:
+                i, j = g[a][0], h[b][0]
+                if i in last and last[i] != j:
+                    idsw += 1
+                last[i] = j
+                matched_g.add(a); matched_h.add(b)
+        fn += len(g) - len(matched_g)
+        fp += len(h) - len(matched_h)
+    mota = 1 - (fn + fp + idsw) / max(n_gt, 1)
+    gids, hids = sorted(gt_len), sorted(hyp_len)
+    idtp = 0
+    if gids and hids and pair_count:
+        M = np.zeros((len(gids), len(hids)))
+        gi = {k: n for n, k in enumerate(gids)}
+        hi = {k: n for n, k in enumerate(hids)}
+        for (i, j), v in pair_count.items():
+            M[gi[i], hi[j]] = v
+        r, c = linear_sum_assignment(-M)
+        idtp = float(M[r, c].sum())
+    idf1 = 2 * idtp / max(n_gt + n_hyp, 1)
+    return {"MOTA": mota, "IDF1": idf1, "IDSW": idsw, "FN": fn, "FP": fp, "GT": n_gt,
+            "gt_ids": len(gids), "hyp_ids": len(hids)}
+
+
+def sot_metrics(pred, gt, centre_px=20):
+    """Single-object tracking measures over the frames where the target is visible (gt box not None).
+
+    pred, gt: lists of [x1, y1, x2, y2] or None. Returns the success rate (share of frames with IoU >= 0.5), the
+    area under the success curve (mean over IoU thresholds 0...1), the precision (share of frames with the centre
+    error <= centre_px) and the number of visible frames without a predicted box."""
+    ious, errs, missed = [], [], 0
+    for p, g in zip(pred, gt):
+        if g is None:
+            continue
+        if p is None:
+            ious.append(0.0); errs.append(np.inf); missed += 1
+            continue
+        ious.append(float(box_iou_matrix([p], [g])[0, 0]))
+        errs.append(float(np.hypot((p[0] + p[2] - g[0] - g[2]) / 2, (p[1] + p[3] - g[1] - g[3]) / 2)))
+    ious, errs = np.array(ious), np.array(errs)
+    thr = np.linspace(0, 1, 21)
+    return {"frames": int(len(ious)), "success50": float((ious >= 0.5).mean()) if len(ious) else 0.0,
+            "success_auc": float(np.mean([(ious > t).mean() for t in thr])) if len(ious) else 0.0,
+            "precision": float((errs <= centre_px).mean()) if len(errs) else 0.0, "missed": int(missed)}
+
+
+def segmentation_iou(pred, truth, n_classes, ignore=255):
+    """Confusion matrix and IoU of every class of a semantic segmentation (arrays of class indices)."""
+    m = truth != ignore
+    cm = np.bincount(n_classes * truth[m].astype(int) + pred[m].astype(int),
+                     minlength=n_classes * n_classes).reshape(n_classes, n_classes)
+    inter = np.diag(cm)
+    union = cm.sum(0) + cm.sum(1) - inter
+    return cm, inter / np.maximum(union, 1)
+
+
+def lraspp_traversability(n_classes=3, pretrained=True):
+    """LR-ASPP segmentation network with the MobileNetV3-Large backbone (torchvision, weights of COCO with the
+    VOC classes); the two output convolutions are replaced for n_classes. Returns the model with a frozen
+    backbone (only model.classifier is trained)."""
+    import torch
+    from torchvision.models.segmentation import lraspp_mobilenet_v3_large, LRASPP_MobileNet_V3_Large_Weights
+    w = LRASPP_MobileNet_V3_Large_Weights.COCO_WITH_VOC_LABELS_V1 if pretrained else None
+    model = lraspp_mobilenet_v3_large(weights=w, progress=False)
+    head = model.classifier
+    head.low_classifier = torch.nn.Conv2d(head.low_classifier.in_channels, n_classes, 1)
+    head.high_classifier = torch.nn.Conv2d(head.high_classifier.in_channels, n_classes, 1)
+    for p in model.backbone.parameters():
+        p.requires_grad = False
+    return model
+
+
+def corridor_mask(shape, bottom_width=0.5, top_width=0.16, height=0.45):
+    """Trapezoid in front of a ground vehicle (bottom part of the frame): the area that the vehicle crosses in the
+    next seconds. Shares of the frame width and height."""
+    h, w = shape[:2]
+    yb, yt = h - 1, int(h * (1 - height))
+    pts = np.array([[w / 2 - bottom_width * w / 2, yb], [w / 2 + bottom_width * w / 2, yb],
+                    [w / 2 + top_width * w / 2, yt], [w / 2 - top_width * w / 2, yt]], np.int32)
+    m = np.zeros((h, w), np.uint8)
+    cv2.fillPoly(m, [pts], 1)
+    return m.astype(bool)

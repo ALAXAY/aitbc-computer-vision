@@ -9,8 +9,8 @@ authors:
     affiliation: "Kruty Heroes Military Institute of Telecommunications and Information Technology"
 repository-code: "https://github.com/ALAXAY/aitbc-computer-vision"
 license: Apache-2.0
-version: "0.7.0"
-date-released: "2026-11-02"
+version: "1.0.0"
+date-released: "2026-11-03"
 keywords:
   - computer vision
   - UAV

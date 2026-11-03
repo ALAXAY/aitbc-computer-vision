@@ -1,5 +1,7 @@
 # AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab
 
+![AI Technologies (Basic Course): computer vision for UAVs and ground robotic systems](assets/course_banner.jpg)
+
 Google Colab notebooks of the professional development course **AI Technologies (Basic Course)**, AIT-BC
 («Технології штучного інтелекту (базовий курс)»), 40 hours, developed at the Kruty Heroes Military Institute
 of Telecommunications and Information Technology, Kyiv, Ukraine, 2026.
@@ -22,21 +24,22 @@ thermal frames, FPV video, annotated data sets), which is downloaded from the or
 | NB05 | 3 | 3.1 Lecture: extraction of edges, silhouettes and contours by classical methods; 3.3 Practical: silhouettes and thermal signatures in thermal frames; 3.4 Practical: stabilisation of the video stream of an FPV drone | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_NB05_Edges_contours_and_FPV_stabilisation.ipynb) | [view](executed_examples/AITBC_NB05_executed_example.ipynb) |
 | NB06 | 4 | 4.1 Lecture: machine learning in the recognition of military objects (data set, HOG, SVM and Random Forest, metrics); 4.2 Group class: from the neuron to MobileNet, transfer learning and ONNX | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_NB06_Military_object_recognition_ML_and_CNN.ipynb) | [view](executed_examples/AITBC_NB06_executed_example.ipynb) |
 | NB07 | 4 | 4.3 Practical: classification of thermal signatures by HOG + SVM, target versus background; 4.4 Practical: transfer learning of MobileNet for the recognition of military vehicles and export to ONNX | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_NB07_Thermal_HOG_SVM_and_MobileNet_transfer_learning.ipynb) | [view](executed_examples/AITBC_NB07_executed_example.ipynb) |
+| NB08 | 5 | 5.1 Lecture: object detection by YOLO, IoU, confidence, NMS, mAP and small targets; 5.2 Group class: traversable area of a UGV, tracking (ByteTrack), video pipeline and real time | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_NB08_YOLO_detection_segmentation_and_tracking.ipynb) | [view](executed_examples/AITBC_NB08_executed_example.ipynb) |
+| NB09 | 5 | 5.3 Practical: YOLO11 on a single frame, a series of UAV frames, FPV and thermal frames, saved video; 5.4 Practical (4 h), mini-project: detector and tracker of drones for a counter-UAV post | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_NB09_YOLO_practice_and_counter_UAV_mini_project.ipynb) | [view](executed_examples/AITBC_NB09_executed_example.ipynb) |
 | Practical | 1–5 | End-to-end practical notebook for the five topics: from a UAV video frame to detection and tracking | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ALAXAY/aitbc-computer-vision/blob/main/notebooks/AITBC_Practical_Course_Colab_EN.ipynb) | [view](executed_examples/AITBC_Practical_Course_EN_executed_example.ipynb) |
 
-**Status.** Notebooks NB01–NB07 cover 15 of the 19 lessons (30 of 40 hours). Topic 5 (lessons 5.1–5.4: detection
-of objects by YOLO, segmentation of the traversable area, tracking, real-time video pipeline and the mini-project)
-is in preparation as NB08 and NB09.
+**Status.** The course is complete: notebooks NB01–NB09 cover all 19 lessons of the programme (40 hours). The practical notebook repeats the five topics in one notebook.
 
 ## How to work with the notebooks
 
 1. Press **Open in Colab** next to a notebook, then *Runtime → Run all*, or run the cells one by one with `Shift+Enter`.
    Section 0 of each notebook is always run first.
 2. The course library `aitbc.py` is embedded in every notebook, so no installation from this repository is needed.
-   The file [`aitbc.py`](aitbc.py) in the root is the same library (version 2.6.0) for use outside Colab.
+   The file [`aitbc.py`](aitbc.py) in the root is the same library (version 2.7.0) for use outside Colab.
 3. The data sets are downloaded at run time into `/content/aitbc_data`; a copy can be kept on Google Drive.
-4. A GPU runtime (*Runtime → Change runtime type → T4 GPU*) is recommended for Lesson 4.4 of NB07; all other
-   notebooks run on the CPU runtime.
+4. A GPU runtime (*Runtime → Change runtime type → T4 GPU*) is recommended for Lesson 4.4 of NB07 and is needed
+   for the mini-project of Lesson 5.4 (NB09, training of YOLO11); all other notebooks run on the CPU runtime.
+5. NB08 and NB09 install the library Ultralytics (YOLO11) in the Colab session; it is not part of this repository.
 
 The executed examples in [`executed_examples/`](executed_examples) were produced with the default parameters on a
 local CPU computer. They show what the results look like before running a notebook.
@@ -47,6 +50,7 @@ local CPU computer. They show what the results look like before running a notebo
 notebooks/            notebooks for Google Colab (without outputs)
 executed_examples/    the same notebooks executed with the default parameters
 figures/              figures of the executed examples, by notebook
+assets/               banner of the course
 aitbc.py              course library (embedded in the notebooks)
 build/                scripts used to generate the notebooks
 LICENSE, NOTICE       licence of the code and the text (Apache-2.0)
@@ -68,6 +72,7 @@ repositories; the use of each data set is governed by its own licence, see [DATA
 | TII-RATM | FPV racing quadrotor frames with IMU and motion capture | CC BY 4.0 |
 | SULAND / SULAND_v2 | frames with surrogates of surface landmines PFM-1 and PMA-2 | CC BY 4.0 |
 | military_vehicles | photographs of 24 types of military vehicles | declared MIT, photographs from web sites |
+| DUT Anti-UAV | images and videos of drones taken by ground cameras (counter-UAV task) | Apache-2.0 |
 | VisDrone2019-DET | UAV frames over cities | non-commercial use |
 
 ## Licence

@@ -10,4 +10,5 @@ The data sets used by the notebooks are not part of this repository. Figures in 
 figures/ that show images of a data set are distributed under the licence of that data set and keep the
 attribution given in DATA_LICENSES.md:
   - HIT-UAV, Kust4K, M3OT, TII-RATM, SULAND / SULAND_v2: CC BY 4.0;
+  - DUT Anti-UAV: Apache-2.0;
   - GOOSE: CC BY-SA 4.0.
