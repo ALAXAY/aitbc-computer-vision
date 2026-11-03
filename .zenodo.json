@@ -29,6 +29,11 @@
   ],
   "related_identifiers": [
     {
+      "identifier": "https://github.com/ALAXAY/aitbc-computer-vision",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
       "identifier": "10.1038/s41597-023-02066-6",
       "relation": "references",
       "scheme": "doi"

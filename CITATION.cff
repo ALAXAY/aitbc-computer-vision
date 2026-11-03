@@ -7,8 +7,17 @@ authors:
   - family-names: Fesenko
     given-names: Oleksii
     affiliation: "Kruty Heroes Military Institute of Telecommunications and Information Technology"
+    orcid: "https://orcid.org/0000-0002-2114-5327"
 repository-code: "https://github.com/ALAXAY/aitbc-computer-vision"
 license: Apache-2.0
+doi: "10.5281/zenodo.23918263"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23918263"
+    description: "All versions (concept DOI)"
+  - type: doi
+    value: "10.5281/zenodo.23918264"
+    description: "Version 1.0.0"
 version: "1.0.0"
 date-released: "2026-11-03"
 keywords:

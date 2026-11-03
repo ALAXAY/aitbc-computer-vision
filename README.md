@@ -1,5 +1,7 @@
 # AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23918263.svg)](https://doi.org/10.5281/zenodo.23918263)
+
 ![AI Technologies (Basic Course): computer vision for UAVs and ground robotic systems](assets/course_banner.jpg)
 
 Google Colab notebooks of the professional development course **AI Technologies (Basic Course)**, AIT-BC
@@ -85,4 +87,7 @@ executed examples in this repository; running the notebooks in Colab reproduces 
 
 ## Citation
 
-If you use these materials, please cite them as given in [CITATION.cff](CITATION.cff).
+Fesenko O. *AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab* [software], version 1.0.0.
+Zenodo, 2026. https://doi.org/10.5281/zenodo.23918264
+
+The DOI of all versions (always resolves to the latest version): https://doi.org/10.5281/zenodo.23918263. See also [CITATION.cff](CITATION.cff).
