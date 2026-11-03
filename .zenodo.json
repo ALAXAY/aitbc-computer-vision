@@ -1,0 +1,48 @@
+{
+  "title": "AI Technologies (Basic Course): computer vision for UAV and UGV in Google Colab",
+  "upload_type": "software",
+  "version": "1.0.0",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Fesenko, Oleksii",
+      "affiliation": "Kruty Heroes Military Institute of Telecommunications and Information Technology",
+      "orcid": "0000-0002-2114-5327"
+    }
+  ],
+  "description": "<p>Google Colab notebooks of the professional development course <i>AI Technologies (Basic Course)</i>, AIT-BC (40 hours, 19 lessons), developed at the Kruty Heroes Military Institute of Telecommunications and Information Technology, Kyiv, Ukraine. The nine notebooks cover computer vision for unmanned aerial vehicles and unmanned ground vehicles: the digital image and video stream, preprocessing and filtering, classical feature extraction, thermal signatures, stabilisation of FPV video, machine learning and neural networks for the recognition of military objects, object detection by YOLO, segmentation of the traversable area, tracking (ByteTrack) and a counter-UAV mini-project. Every block of code is preceded by a text cell with the method, formulas and parameters; parameters are set through Colab forms.</p><p>All exercises use real open data sets (HIT-UAV, Kust4K, M3OT, GOOSE, TII-RATM, SULAND, DUT Anti-UAV and others), which are downloaded from the original sources at run time and are not part of this record. The licences of the data sets are listed in DATA_LICENSES.md; figures in the executed examples that show images of a data set remain under the licence of that data set.</p>",
+  "license": "apache-2.0",
+  "keywords": [
+    "computer vision",
+    "unmanned aerial vehicles",
+    "UAV",
+    "UGV",
+    "thermal imagery",
+    "object detection",
+    "YOLO",
+    "tracking",
+    "semantic segmentation",
+    "counter-UAV",
+    "Google Colab",
+    "education",
+    "deep learning"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.1038/s41597-023-02066-6",
+      "relation": "references",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.3390/rs16040677",
+      "relation": "references",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.1109/icra57147.2024.10611298",
+      "relation": "references",
+      "scheme": "doi"
+    }
+  ],
+  "notes": "Code and text: Apache License 2.0. The data sets used by the notebooks are not included; see DATA_LICENSES.md."
+}
