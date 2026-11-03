@@ -15,6 +15,14 @@ preceded by a text cell with the method, the formulas and the meaning of the par
 set through Colab forms (`#@param`). All examples use **real** imagery of UAVs and ground platforms (visible and
 thermal frames, FPV video, annotated data sets), which is downloaded from the original sources at run time.
 
+## Course roadmap
+
+The course consists of two modules and five topics: 19 lessons, 40 hours. Each station of the road is a topic; below
+it are its lessons (lecture, group class, practical class) with the notebook that covers them, the data sets and the
+result of the topic. The course ends with the mini-project of lesson 5.4, a counter-UAV detector and tracker.
+
+![Course roadmap: 5 topics, 19 lessons, 40 hours, notebooks NB01–NB09](assets/course_roadmap.png)
+
 ## Notebooks
 
 | Notebook | Topic | Lessons | Open | Executed example |
@@ -52,9 +60,9 @@ local CPU computer. They show what the results look like before running a notebo
 notebooks/            notebooks for Google Colab (without outputs)
 executed_examples/    the same notebooks executed with the default parameters
 figures/              figures of the executed examples, by notebook
-assets/               banner of the course
+assets/               banner and roadmap of the course
 aitbc.py              course library (embedded in the notebooks)
-build/                scripts used to generate the notebooks
+build/                scripts used to generate the notebooks and the roadmap
 LICENSE, NOTICE       licence of the code and the text (Apache-2.0)
 DATA_LICENSES.md      data sets, their authors and licences
 CITATION.cff          how to cite the course
