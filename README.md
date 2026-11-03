@@ -21,7 +21,7 @@ The course consists of two modules and five topics: 19 lessons, 40 hours. Each s
 hours; below it are its lessons (lecture, group class, practical class). The course ends with the final mini-project of
 lesson 5.4, detection and tracking of UAVs.
 
-![Course roadmap: 5 topics, 19 lessons, 40 hours, notebooks NB01–NB09](assets/course_roadmap.png)
+![Course roadmap: 2 modules, 5 topics, 19 lessons, 40 hours](assets/course_roadmap.png)
 
 ## Notebooks
 
